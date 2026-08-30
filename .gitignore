@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+backend/venv/
+
+# Environment / secrets
+.env
+backend/.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads / generated files
+backend/uploads/evidence/*
+backend/uploads/generated/*
+
+# Keep upload folders
+!backend/uploads/evidence/.gitkeep
+!backend/uploads/generated/.gitkeep
