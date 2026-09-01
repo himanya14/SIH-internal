@@ -1,4 +1,5 @@
 import re
+
 import spacy
 
 
@@ -31,13 +32,19 @@ RELATION_VERBS = {
 # MAIN FUNCTION
 # =========================================================
 
-def extract_relationships(text, entities, source_type="FIR"):
+def extract_relationships(
+    text,
+    entities,
+    source_type="FIR"
+):
 
     doc = nlp(text)
 
     relationships = []
 
-    known_entities = build_known_entities(entities)
+    known_entities = build_known_entities(
+        entities
+    )
 
     for sentence in doc.sents:
 
@@ -47,9 +54,13 @@ def extract_relationships(text, entities, source_type="FIR"):
             source_type
         )
 
-        relationships.extend(sentence_relationships)
+        relationships.extend(
+            sentence_relationships
+        )
 
-    return remove_duplicates(relationships)
+    return remove_duplicates(
+        relationships
+    )
 
 
 # =========================================================
@@ -70,9 +81,14 @@ def build_known_entities(entities):
         "dates_times": "DATE_TIME"
     }
 
-    for category, entity_type in entity_type_mapping.items():
+    for category, entity_type in (
+        entity_type_mapping.items()
+    ):
 
-        for value in entities.get(category, []):
+        for value in entities.get(
+            category,
+            []
+        ):
 
             known_entities.append({
                 "text": value,
@@ -102,6 +118,22 @@ def extract_from_sentence(
     if not sentence_entities:
         return relationships
 
+    # -----------------------------------------------------
+    # SAME-LOCATION CORRELATION
+    # -----------------------------------------------------
+
+    relationships.extend(
+        extract_same_location_relationships(
+            sentence,
+            sentence_entities,
+            source_type
+        )
+    )
+
+    # -----------------------------------------------------
+    # PHONE / VEHICLE USAGE
+    # -----------------------------------------------------
+
     relationships.extend(
         extract_usage_relationships(
             sentence,
@@ -110,6 +142,10 @@ def extract_from_sentence(
         )
     )
 
+    # -----------------------------------------------------
+    # VERB-BASED RELATIONSHIPS
+    # -----------------------------------------------------
+
     for token in sentence:
 
         lemma = token.lemma_.lower()
@@ -117,17 +153,19 @@ def extract_from_sentence(
         if lemma not in RELATION_VERBS:
             continue
 
-        relationship = RELATION_VERBS[lemma]
+        relationship = RELATION_VERBS[
+            lemma
+        ]
 
         source = find_source_entity(
             token,
             sentence_entities
         )
 
-        # Financial-transfer relationships need special
-        # handling because currency/amount text may appear
-        # between the verb and the actual recipient.
-        if relationship == "TRANSFERRED_MONEY_TO":
+        if (
+            relationship
+            == "TRANSFERRED_MONEY_TO"
+        ):
 
             target = find_financial_target_entity(
                 token,
@@ -141,32 +179,57 @@ def extract_from_sentence(
                 sentence_entities
             )
 
+            # -------------------------------------------------
+            # PERSON-TO-PERSON FALLBACK
+            # -------------------------------------------------
+            #
+            # Example:
+            # Ravi Mehra called Neha Kapoor.
+            #
+            # spaCy may attach only "Kapoor" as the object,
+            # while our entity is the full "Neha Kapoor".
+            # If normal dependency matching fails, choose the
+            # nearest person appearing after the verb.
+            # -------------------------------------------------
+
+            if target is None:
+
+                target = find_person_target_after_verb(
+                    token,
+                    sentence_entities,
+                    source
+                )
+
         if source and target:
 
-            if relationship == "USED_VEHICLE":
-                continue
+            if relationship != "USED_VEHICLE":
 
-            relationships.append(
-                create_relationship(
-                    source,
-                    target,
-                    relationship,
-                    sentence.text,
-                    source_type,
-                    0.95
+                relationships.append(
+                    create_relationship(
+                        source,
+                        target,
+                        relationship,
+                        sentence.text,
+                        source_type,
+                        0.95
+                    )
                 )
-            )
 
         else:
 
-            passive_result = extract_passive_relationship(
-                token,
-                sentence_entities
+            passive_result = (
+                extract_passive_relationship(
+                    token,
+                    sentence_entities
+                )
             )
 
             if passive_result:
 
-                passive_source, passive_target = passive_result
+                (
+                    passive_source,
+                    passive_target
+                ) = passive_result
 
                 relationships.append(
                     create_relationship(
@@ -197,10 +260,16 @@ def extract_from_sentence(
             )
         )
 
-    location_relationships = extract_location_relationships(
-        sentence_entities,
-        sentence.text,
-        source_type
+    # -----------------------------------------------------
+    # PERSON -> LOCATION RELATIONSHIP
+    # -----------------------------------------------------
+
+    location_relationships = (
+        extract_location_relationships(
+            sentence_entities,
+            sentence.text,
+            source_type
+        )
     )
 
     specific_location_exists = any(
@@ -233,14 +302,23 @@ def find_sentence_entities(
     for entity in known_entities:
 
         entity_text = entity["text"]
+        entity_lower = entity_text.lower()
 
-        if entity_text.lower() in sentence_lower:
+        search_start = 0
+
+        while True:
 
             start = sentence_lower.find(
-                entity_text.lower()
+                entity_lower,
+                search_start
             )
 
-            end = start + len(entity_text)
+            if start == -1:
+                break
+
+            end = start + len(
+                entity_text
+            )
 
             results.append({
                 "text": entity_text,
@@ -249,11 +327,103 @@ def find_sentence_entities(
                 "end": end
             })
 
+            search_start = end
+
     results.sort(
-        key=lambda x: x["start"]
+        key=lambda item: item["start"]
     )
 
     return results
+
+
+# =========================================================
+# SAME-LOCATION RELATIONSHIPS
+# =========================================================
+
+def extract_same_location_relationships(
+    sentence,
+    sentence_entities,
+    source_type
+):
+
+    relationships = []
+
+    persons = [
+        entity
+        for entity in sentence_entities
+        if entity["type"] == "PERSON"
+    ]
+
+    if len(persons) < 2:
+        return relationships
+
+    sentence_lower = sentence.text.lower()
+
+    same_location_indicators = [
+        "same geographic area",
+        "same geographical area",
+        "same location",
+        "same area",
+        "same place",
+        "same vicinity",
+        "same geographic zone",
+        "same geographical zone",
+        "co-located",
+        "colocated"
+    ]
+
+    has_same_location_indicator = any(
+        indicator in sentence_lower
+        for indicator in same_location_indicators
+    )
+
+    if not has_same_location_indicator:
+        return relationships
+
+    observation_indicators = [
+        "observed",
+        "seen",
+        "recorded",
+        "located",
+        "detected",
+        "present",
+        "found",
+        "reported",
+        "captured"
+    ]
+
+    has_observation_context = any(
+        indicator in sentence_lower
+        for indicator in observation_indicators
+    )
+
+    if not has_observation_context:
+        return relationships
+
+    for index in range(
+        len(persons)
+    ):
+
+        for second_index in range(
+            index + 1,
+            len(persons)
+        ):
+
+            source = persons[index]
+            target = persons[second_index]
+
+            relationships.append(
+                create_relationship(
+                    source,
+                    target,
+                    "SEEN_AT_SAME_LOCATION",
+                    sentence.text,
+                    source_type,
+                    0.87
+                )
+            )
+
+    return relationships
 
 
 # =========================================================
@@ -277,13 +447,49 @@ def find_source_entity(
             subject = child
             break
 
-    if subject is None:
-        return None
+    if subject is not None:
 
-    return token_to_entity(
-        subject,
-        sentence_entities
+        entity = token_to_entity(
+            subject,
+            sentence_entities
+        )
+
+        if entity:
+            return entity
+
+    # -----------------------------------------------------
+    # SOURCE POSITIONAL FALLBACK
+    # -----------------------------------------------------
+    #
+    # If dependency parsing does not map the subject to
+    # the full entity, use the nearest person before verb.
+    # -----------------------------------------------------
+
+    sentence_start = verb.sent.start_char
+
+    relative_verb_start = (
+        verb.idx - sentence_start
     )
+
+    candidates = [
+        entity
+        for entity in sentence_entities
+        if (
+            entity["type"] == "PERSON"
+            and entity["end"] <= relative_verb_start
+        )
+    ]
+
+    if candidates:
+
+        candidates.sort(
+            key=lambda entity: entity["end"],
+            reverse=True
+        )
+
+        return candidates[0]
+
+    return None
 
 
 # =========================================================
@@ -330,6 +536,51 @@ def find_target_entity(
 
 
 # =========================================================
+# PERSON TARGET POSITIONAL FALLBACK
+# =========================================================
+
+def find_person_target_after_verb(
+    verb,
+    sentence_entities,
+    source=None
+):
+
+    sentence_start = verb.sent.start_char
+
+    relative_verb_end = (
+        verb.idx
+        - sentence_start
+        + len(verb.text)
+    )
+
+    candidates = [
+        entity
+        for entity in sentence_entities
+        if (
+            entity["type"] == "PERSON"
+            and entity["start"] >= relative_verb_end
+        )
+    ]
+
+    if source:
+
+        candidates = [
+            entity
+            for entity in candidates
+            if entity["text"] != source["text"]
+        ]
+
+    if not candidates:
+        return None
+
+    candidates.sort(
+        key=lambda entity: entity["start"]
+    )
+
+    return candidates[0]
+
+
+# =========================================================
 # FIND FINANCIAL TRANSFER TARGET
 # =========================================================
 
@@ -339,20 +590,8 @@ def find_financial_target_entity(
 ):
 
     sentence = verb.sent
-    sentence_text = sentence.text
 
-    # -----------------------------------------------------
-    # Preferred rule:
-    #
-    # transferred INR 500000 to Amit Khanna
-    # transferred ₹500000 to Amit Khanna
-    # transferred Rs 500000 to Amit Khanna
-    # transferred 5 lakh to Amit Khanna
-    #
-    # For financial transfers, an entity occurring after
-    # "to" is a much stronger recipient candidate than
-    # currency text appearing immediately after the verb.
-    # -----------------------------------------------------
+    sentence_text = sentence.text
 
     to_match = re.search(
         r"\bto\b",
@@ -369,13 +608,14 @@ def find_financial_target_entity(
             for entity in sentence_entities
             if (
                 entity["start"] >= to_position
-                and not is_currency_entity(entity)
+                and not is_currency_entity(
+                    entity
+                )
             )
         ]
 
         if candidates:
 
-            # Prefer a person as the recipient.
             person_candidates = [
                 entity
                 for entity in candidates
@@ -385,12 +625,7 @@ def find_financial_target_entity(
             if person_candidates:
                 return person_candidates[0]
 
-            # Otherwise use the first valid entity after "to".
             return candidates[0]
-
-    # -----------------------------------------------------
-    # Dependency-based fallback
-    # -----------------------------------------------------
 
     for child in verb.children:
 
@@ -410,16 +645,11 @@ def find_financial_target_entity(
 
                     if (
                         entity
-                        and not is_currency_entity(entity)
+                        and not is_currency_entity(
+                            entity
+                        )
                     ):
                         return entity
-
-    # -----------------------------------------------------
-    # Direct-object fallback
-    #
-    # Example:
-    # Ravi paid Amit.
-    # -----------------------------------------------------
 
     for child in verb.children:
 
@@ -436,15 +666,11 @@ def find_financial_target_entity(
 
             if (
                 entity
-                and not is_currency_entity(entity)
+                and not is_currency_entity(
+                    entity
+                )
             ):
                 return entity
-
-    # -----------------------------------------------------
-    # Final positional fallback:
-    # choose the nearest suitable entity appearing after
-    # the financial verb.
-    # -----------------------------------------------------
 
     sentence_start = sentence.start_char
 
@@ -459,7 +685,9 @@ def find_financial_target_entity(
         for entity in sentence_entities
         if (
             entity["start"] >= relative_verb_end
-            and not is_currency_entity(entity)
+            and not is_currency_entity(
+                entity
+            )
         )
     ]
 
@@ -488,7 +716,11 @@ def is_currency_entity(entity):
     if entity is None:
         return False
 
-    value = entity["text"].strip().lower()
+    value = (
+        entity["text"]
+        .strip()
+        .lower()
+    )
 
     currency_values = {
         "inr",
@@ -541,7 +773,10 @@ def extract_passive_relationship(
     for child in verb.children:
 
         if (
-            child.dep_ in ["agent", "prep"]
+            child.dep_ in [
+                "agent",
+                "prep"
+            ]
             and child.text.lower() == "by"
         ):
 
@@ -556,7 +791,10 @@ def extract_passive_relationship(
 
     if passive_subject and agent:
 
-        return agent, passive_subject
+        return (
+            agent,
+            passive_subject
+        )
 
     return None
 
@@ -574,6 +812,7 @@ def token_to_entity(
         return None
 
     token_start = token.idx
+
     sentence_start = token.sent.start_char
 
     relative_token_start = (
@@ -581,8 +820,13 @@ def token_to_entity(
     )
 
     relative_token_end = (
-        relative_token_start + len(token.text)
+        relative_token_start
+        + len(token.text)
     )
+
+    # -----------------------------------------------------
+    # TOKEN STARTS INSIDE ENTITY
+    # -----------------------------------------------------
 
     for entity in sentence_entities:
 
@@ -593,6 +837,24 @@ def token_to_entity(
         ):
 
             return entity
+
+    # -----------------------------------------------------
+    # TOKEN ENDS INSIDE ENTITY
+    # -----------------------------------------------------
+
+    for entity in sentence_entities:
+
+        if (
+            entity["start"]
+            < relative_token_end
+            <= entity["end"]
+        ):
+
+            return entity
+
+    # -----------------------------------------------------
+    # TOKEN IS FULLY INSIDE ENTITY
+    # -----------------------------------------------------
 
     for entity in sentence_entities:
 
@@ -813,7 +1075,10 @@ def extract_location_relationships(
         if entity["type"] == "LOCATION"
     ]
 
-    if not persons or not locations:
+    if (
+        not persons
+        or not locations
+    ):
         return relationships
 
     evidence_lower = evidence.lower()
@@ -873,7 +1138,9 @@ def create_relationship(
 # REMOVE DUPLICATES
 # =========================================================
 
-def remove_duplicates(relationships):
+def remove_duplicates(
+    relationships
+):
 
     unique = []
 
@@ -891,6 +1158,8 @@ def remove_duplicates(relationships):
 
             seen.add(key)
 
-            unique.append(relationship)
+            unique.append(
+                relationship
+            )
 
     return unique

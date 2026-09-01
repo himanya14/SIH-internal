@@ -1,9 +1,22 @@
 import re
+
 import spacy
 
 
 # Load NLP model
 nlp = spacy.load("en_core_web_sm")
+
+
+# Terms that spaCy may classify as organisations
+# but are not useful investigative organisations.
+EXCLUDED_ORGANISATIONS = {
+    "INR",
+    "RS",
+    "USD",
+    "EUR",
+    "GBP",
+    "CINTRA"
+}
 
 
 def extract_entities(text):
@@ -20,42 +33,55 @@ def extract_entities(text):
         "dates_times": []
     }
 
+    # =====================================================
     # 1. SPACY NER
+    # =====================================================
 
     for ent in doc.ents:
+
+        entity_text = ent.text.strip()
 
         # Never allow phone numbers to become dates
         if ent.label_ in ["DATE", "TIME"]:
 
             if not re.fullmatch(
                 r"(?:\+91[-\s]?)?[6-9]\d{9}",
-                ent.text.strip()
+                entity_text
             ):
                 entities["dates_times"].append(
-                    ent.text.strip()
+                    entity_text
                 )
 
         elif ent.label_ == "PERSON":
 
             entities["persons"].append(
-                ent.text.strip()
+                entity_text
             )
 
         elif ent.label_ in ["GPE", "LOC", "FAC"]:
 
             entities["locations"].append(
-                ent.text.strip()
+                entity_text
             )
 
         elif ent.label_ == "ORG":
 
-            entities["organisations"].append(
-                ent.text.strip()
-            )
+            # Ignore currency codes and CINTRA itself.
+            if (
+                entity_text.upper()
+                not in EXCLUDED_ORGANISATIONS
+            ):
+                entities["organisations"].append(
+                    entity_text
+                )
 
+    # =====================================================
     # 2. PHONE NUMBERS
+    # =====================================================
 
-    phone_pattern = r"\b(?:\+91[-\s]?)?[6-9]\d{9}\b"
+    phone_pattern = (
+        r"\b(?:\+91[-\s]?)?[6-9]\d{9}\b"
+    )
 
     phones = re.findall(
         phone_pattern,
@@ -67,9 +93,14 @@ def extract_entities(text):
         phone = phone.strip()
 
         if phone not in entities["phones"]:
-            entities["phones"].append(phone)
+            entities["phones"].append(
+                phone
+            )
 
+    # =====================================================
     # 3. VEHICLE NUMBERS
+    # =====================================================
+
     vehicle_pattern = (
         r"\b[A-Z]{2}"
         r"\d{1,2}"
@@ -85,9 +116,13 @@ def extract_entities(text):
     for vehicle in vehicles:
 
         if vehicle not in entities["vehicles"]:
-            entities["vehicles"].append(vehicle)
+            entities["vehicles"].append(
+                vehicle
+            )
 
+    # =====================================================
     # 4. LOCATION PATTERNS
+    # =====================================================
 
     # Examples:
     # Sector 21
@@ -120,9 +155,13 @@ def extract_entities(text):
             )
 
             if location not in entities["locations"]:
-                entities["locations"].append(location)
+                entities["locations"].append(
+                    location
+                )
 
+    # =====================================================
     # 5. PERSON NAME RECOVERY
+    # =====================================================
 
     # Generic FIR-style names often appear as:
     #
@@ -130,9 +169,8 @@ def extract_entities(text):
     # Amit Sharma
     # Raj Malhotra
     #
-    # spaCy's small model may miss part of these names.
-    #
-    # We therefore look for consecutive capitalized words.
+    # spaCy's small model may miss some of these names,
+    # so consecutive capitalized words are also checked.
 
     name_pattern = (
         r"\b[A-Z][a-z]+"
@@ -144,7 +182,6 @@ def extract_entities(text):
         text
     )
 
-    # Words that commonly appear as non-person phrases
     excluded_phrases = {
         "Sector",
         "Block",
@@ -161,27 +198,27 @@ def extract_entities(text):
         if name in excluded_phrases:
             continue
 
-        # Don't classify phrases containing known entities
-        # such as vehicle numbers.
         if name in entities["vehicles"]:
             continue
 
-        # Avoid duplicates
         if name not in entities["persons"]:
+            entities["persons"].append(
+                name
+            )
 
-            entities["persons"].append(name)
-
+    # =====================================================
     # 6. BANK ACCOUNT NUMBERS
+    # =====================================================
 
-    # We DON'T classify every 9-18 digit number as a bank
-    # account because that creates false positives.
-    #
-    # Instead, look for account-related context.
+    # Do not classify every long number as an account.
+    # Require account-related context.
 
     account_patterns = [
-        r"(?:account|a/c|account\s+number)"
-        r"\s*(?:no\.?|number)?\s*[:\-]?\s*"
-        r"(\d{9,18})"
+        (
+            r"(?:account|a/c|account\s+number)"
+            r"\s*(?:no\.?|number)?\s*[:\-]?\s*"
+            r"(\d{9,18})"
+        )
     ]
 
     for pattern in account_patterns:
@@ -194,45 +231,80 @@ def extract_entities(text):
 
         for account in matches:
 
-            if account not in entities["phones"]:
-
+            if (
+                account not in entities["phones"]
+                and account
+                not in entities["bank_accounts"]
+            ):
                 entities["bank_accounts"].append(
                     account
                 )
 
-    # 7. REMOVE FALSE PERSONS/PARTIAL NAMES
+    # =====================================================
+    # 7. REMOVE PARTIAL PERSON NAMES
+    # =====================================================
 
-    # Remove people that are already contained inside
-    # a longer detected person name.
-    
     # Example:
-    # "Malhotra"
-    # "Raj Malhotra"
-    # Keep only "Raj Malhotra".
-    
+    #
+    # Malhotra
+    # Raj Malhotra
+    #
+    # Keep only Raj Malhotra.
+
     normalized_persons = []
+
     for person in entities["persons"]:
+
         is_partial = False
+
         for other_person in entities["persons"]:
+
             if person == other_person:
                 continue
-            if (person.lower() in other_person.lower() and len(person) < len(other_person)):
+
+            if (
+                person.lower()
+                in other_person.lower()
+                and len(person) < len(other_person)
+            ):
                 is_partial = True
                 break
 
         if not is_partial:
-            normalized_persons.append(person)
+            normalized_persons.append(
+                person
+            )
 
     entities["persons"] = normalized_persons
 
+    # Remove people that are actually locations.
 
-    # Remove people that are actually locations
-    entities["persons"] = [person
-    for person in entities["persons"]
-    if person not in entities["locations"]
+    entities["persons"] = [
+        person
+        for person in entities["persons"]
+        if person not in entities["locations"]
     ]
 
-    # 8. FINAL CLEANUP
+    # =====================================================
+    # 8. FINAL ORGANISATION CLEANUP
+    # =====================================================
+
+    # Run the filter again in case another extraction
+    # path adds an excluded organisation in the future.
+
+    entities["organisations"] = [
+        organisation
+        for organisation
+        in entities["organisations"]
+        if (
+            organisation.strip().upper()
+            not in EXCLUDED_ORGANISATIONS
+        )
+    ]
+
+    # =====================================================
+    # 9. FINAL CLEANUP
+    # =====================================================
 
     for key in entities:
 
@@ -242,8 +314,13 @@ def extract_entities(text):
 
             item = item.strip()
 
-            if item and item not in cleaned:
-                cleaned.append(item)
+            if (
+                item
+                and item not in cleaned
+            ):
+                cleaned.append(
+                    item
+                )
 
         entities[key] = cleaned
 
