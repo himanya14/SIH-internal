@@ -1,3 +1,4 @@
+import re
 import spacy
 
 
@@ -101,15 +102,6 @@ def extract_from_sentence(
     if not sentence_entities:
         return relationships
 
-    # -----------------------------------------------------
-    # Handle use / used / using separately
-    #
-    # "used" is not a generic relationship.
-    #
-    # Person + phone   -> USED_PHONE
-    # Person + vehicle -> USED_VEHICLE
-    # -----------------------------------------------------
-
     relationships.extend(
         extract_usage_relationships(
             sentence,
@@ -117,10 +109,6 @@ def extract_from_sentence(
             source_type
         )
     )
-
-    # -----------------------------------------------------
-    # Find normal relationship verbs
-    # -----------------------------------------------------
 
     for token in sentence:
 
@@ -131,25 +119,30 @@ def extract_from_sentence(
 
         relationship = RELATION_VERBS[lemma]
 
-        # -------------------------------------------------
-        # Active voice
-        # -------------------------------------------------
-
         source = find_source_entity(
             token,
             sentence_entities
         )
 
-        target = find_target_entity(
-            token,
-            sentence_entities
-        )
+        # Financial-transfer relationships need special
+        # handling because currency/amount text may appear
+        # between the verb and the actual recipient.
+        if relationship == "TRANSFERRED_MONEY_TO":
+
+            target = find_financial_target_entity(
+                token,
+                sentence_entities
+            )
+
+        else:
+
+            target = find_target_entity(
+                token,
+                sentence_entities
+            )
 
         if source and target:
 
-            # Don't create generic vehicle relationship
-            # if the target is a phone/vehicle through a
-            # specialized relationship.
             if relationship == "USED_VEHICLE":
                 continue
 
@@ -164,10 +157,6 @@ def extract_from_sentence(
                 )
             )
 
-        # -------------------------------------------------
-        # Passive voice
-        # -------------------------------------------------
-
         else:
 
             passive_result = extract_passive_relationship(
@@ -177,22 +166,18 @@ def extract_from_sentence(
 
             if passive_result:
 
-                source, target = passive_result
+                passive_source, passive_target = passive_result
 
                 relationships.append(
                     create_relationship(
-                        source,
-                        target,
+                        passive_source,
+                        passive_target,
                         relationship,
                         sentence.text,
                         source_type,
                         0.93
                     )
                 )
-
-        # -------------------------------------------------
-        # Phone relationships for call/contact
-        # -------------------------------------------------
 
         relationships.extend(
             extract_phone_relationships(
@@ -203,10 +188,6 @@ def extract_from_sentence(
             )
         )
 
-        # -------------------------------------------------
-        # Vehicle relationships for drive
-        # -------------------------------------------------
-
         relationships.extend(
             extract_vehicle_relationships(
                 token,
@@ -216,18 +197,11 @@ def extract_from_sentence(
             )
         )
 
-    # -----------------------------------------------------
-    # Location relationships
-    # -----------------------------------------------------
-
     location_relationships = extract_location_relationships(
         sentence_entities,
         sentence.text,
         source_type
     )
-
-    # Don't create a generic location relationship if
-    # a specific VISITED relationship already exists.
 
     specific_location_exists = any(
         relation["relationship"] == "VISITED"
@@ -275,7 +249,6 @@ def find_sentence_entities(
                 "end": end
             })
 
-    # Sort according to their position in the sentence
     results.sort(
         key=lambda x: x["start"]
     )
@@ -314,17 +287,13 @@ def find_source_entity(
 
 
 # =========================================================
-# FIND TARGET
+# FIND NORMAL TARGET
 # =========================================================
 
 def find_target_entity(
     verb,
     sentence_entities
 ):
-
-    # -----------------------------------------------------
-    # Direct object
-    # -----------------------------------------------------
 
     for child in verb.children:
 
@@ -340,10 +309,6 @@ def find_target_entity(
 
             if entity:
                 return entity
-
-    # -----------------------------------------------------
-    # Prepositional object
-    # -----------------------------------------------------
 
     for child in verb.children:
 
@@ -365,6 +330,191 @@ def find_target_entity(
 
 
 # =========================================================
+# FIND FINANCIAL TRANSFER TARGET
+# =========================================================
+
+def find_financial_target_entity(
+    verb,
+    sentence_entities
+):
+
+    sentence = verb.sent
+    sentence_text = sentence.text
+
+    # -----------------------------------------------------
+    # Preferred rule:
+    #
+    # transferred INR 500000 to Amit Khanna
+    # transferred ₹500000 to Amit Khanna
+    # transferred Rs 500000 to Amit Khanna
+    # transferred 5 lakh to Amit Khanna
+    #
+    # For financial transfers, an entity occurring after
+    # "to" is a much stronger recipient candidate than
+    # currency text appearing immediately after the verb.
+    # -----------------------------------------------------
+
+    to_match = re.search(
+        r"\bto\b",
+        sentence_text,
+        flags=re.IGNORECASE
+    )
+
+    if to_match:
+
+        to_position = to_match.end()
+
+        candidates = [
+            entity
+            for entity in sentence_entities
+            if (
+                entity["start"] >= to_position
+                and not is_currency_entity(entity)
+            )
+        ]
+
+        if candidates:
+
+            # Prefer a person as the recipient.
+            person_candidates = [
+                entity
+                for entity in candidates
+                if entity["type"] == "PERSON"
+            ]
+
+            if person_candidates:
+                return person_candidates[0]
+
+            # Otherwise use the first valid entity after "to".
+            return candidates[0]
+
+    # -----------------------------------------------------
+    # Dependency-based fallback
+    # -----------------------------------------------------
+
+    for child in verb.children:
+
+        if (
+            child.dep_ == "prep"
+            and child.text.lower() == "to"
+        ):
+
+            for grandchild in child.children:
+
+                if grandchild.dep_ == "pobj":
+
+                    entity = token_to_entity(
+                        grandchild,
+                        sentence_entities
+                    )
+
+                    if (
+                        entity
+                        and not is_currency_entity(entity)
+                    ):
+                        return entity
+
+    # -----------------------------------------------------
+    # Direct-object fallback
+    #
+    # Example:
+    # Ravi paid Amit.
+    # -----------------------------------------------------
+
+    for child in verb.children:
+
+        if child.dep_ in [
+            "dobj",
+            "obj",
+            "dative"
+        ]:
+
+            entity = token_to_entity(
+                child,
+                sentence_entities
+            )
+
+            if (
+                entity
+                and not is_currency_entity(entity)
+            ):
+                return entity
+
+    # -----------------------------------------------------
+    # Final positional fallback:
+    # choose the nearest suitable entity appearing after
+    # the financial verb.
+    # -----------------------------------------------------
+
+    sentence_start = sentence.start_char
+
+    relative_verb_end = (
+        verb.idx
+        - sentence_start
+        + len(verb.text)
+    )
+
+    candidates = [
+        entity
+        for entity in sentence_entities
+        if (
+            entity["start"] >= relative_verb_end
+            and not is_currency_entity(entity)
+        )
+    ]
+
+    if candidates:
+
+        person_candidates = [
+            entity
+            for entity in candidates
+            if entity["type"] == "PERSON"
+        ]
+
+        if person_candidates:
+            return person_candidates[0]
+
+        return candidates[0]
+
+    return None
+
+
+# =========================================================
+# CURRENCY ENTITY CHECK
+# =========================================================
+
+def is_currency_entity(entity):
+
+    if entity is None:
+        return False
+
+    value = entity["text"].strip().lower()
+
+    currency_values = {
+        "inr",
+        "rs",
+        "rs.",
+        "rupee",
+        "rupees",
+        "₹",
+        "usd",
+        "dollar",
+        "dollars",
+        "$",
+        "eur",
+        "euro",
+        "euros",
+        "€",
+        "gbp",
+        "pound",
+        "pounds",
+        "£"
+    }
+
+    return value in currency_values
+
+
+# =========================================================
 # PASSIVE VOICE
 # =========================================================
 
@@ -376,28 +526,17 @@ def extract_passive_relationship(
     passive_subject = None
     agent = None
 
-    # -----------------------------------------------------
-    # Find passive subject
-    #
-    # Example:
-    #
-    # Amit was contacted by Ravi.
-    #
-    # Amit -> nsubjpass
-    # -----------------------------------------------------
-
     for child in verb.children:
 
-        if child.dep_ == "nsubjpass":
+        if child.dep_ in [
+            "nsubjpass",
+            "nsubj:pass"
+        ]:
 
             passive_subject = token_to_entity(
                 child,
                 sentence_entities
             )
-
-    # -----------------------------------------------------
-    # Find "by + entity"
-    # -----------------------------------------------------
 
     for child in verb.children:
 
@@ -414,16 +553,6 @@ def extract_passive_relationship(
                         grandchild,
                         sentence_entities
                     )
-
-    # -----------------------------------------------------
-    # Reverse the direction
-    #
-    # Amit was contacted by Ravi
-    #
-    # becomes:
-    #
-    # Ravi -> CONTACTED -> Amit
-    # -----------------------------------------------------
 
     if passive_subject and agent:
 
@@ -455,10 +584,6 @@ def token_to_entity(
         relative_token_start + len(token.text)
     )
 
-    # -----------------------------------------------------
-    # Direct overlap
-    # -----------------------------------------------------
-
     for entity in sentence_entities:
 
         if (
@@ -468,16 +593,6 @@ def token_to_entity(
         ):
 
             return entity
-
-    # -----------------------------------------------------
-    # Multi-word entity
-    #
-    # Example:
-    # Ravi Kumar
-    #
-    # spaCy may give us token "Ravi"
-    # while our entity is "Ravi Kumar"
-    # -----------------------------------------------------
 
     for entity in sentence_entities:
 
@@ -522,10 +637,6 @@ def extract_usage_relationships(
     ):
         return relationships
 
-    # -----------------------------------------------------
-    # Find person performing the action
-    # -----------------------------------------------------
-
     persons = [
         entity
         for entity in sentence_entities
@@ -536,10 +647,6 @@ def extract_usage_relationships(
         return relationships
 
     source = persons[0]
-
-    # -----------------------------------------------------
-    # Person -> Phone
-    # -----------------------------------------------------
 
     phones = [
         entity
@@ -559,10 +666,6 @@ def extract_usage_relationships(
                 0.92
             )
         )
-
-    # -----------------------------------------------------
-    # Person -> Vehicle
-    # -----------------------------------------------------
 
     vehicles = [
         entity

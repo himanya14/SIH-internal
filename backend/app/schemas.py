@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any, Dict
 
 
 # ---------- CASES ----------
@@ -16,6 +16,10 @@ class CaseCreate(BaseModel):
     status: Optional[str] = "Active"
     description: Optional[str] = None
 
+    data_origin: Optional[str] = "Synthetic Demo Data"
+    synthetic: Optional[bool] = True
+    source_reference: Optional[str] = None
+
 
 class CaseUpdate(BaseModel):
     title: Optional[str] = None
@@ -26,9 +30,29 @@ class CaseUpdate(BaseModel):
     status: Optional[str] = None
     description: Optional[str] = None
 
+    data_origin: Optional[str] = None
+    synthetic: Optional[bool] = None
+    source_reference: Optional[str] = None
 
-class CaseResponse(CaseCreate):
+
+class CaseResponse(BaseModel):
     id: int
+
+    case_id: str
+    fir_number: str
+    title: str
+    offence: str
+    police_station: str
+    investigating_officer: str
+
+    stage: str
+    status: str
+    description: Optional[str] = None
+
+    data_origin: str
+    synthetic: bool
+    source_reference: Optional[str] = None
+
     registered_on: datetime
     last_updated: datetime
 
@@ -333,3 +357,40 @@ class IntelligenceAnalysisRequest(BaseModel):
     case_id: Optional[int] = None
     text: str
     source_type: Optional[str] = "FIR"
+
+
+class IntelligenceAnalysisResponse(BaseModel):
+    id: int
+    case_id: int
+    source_type: str
+    input_text: str
+    result_json: Dict[str, Any]
+    created_by: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- INTELLIGENCE ALERTS ----------
+
+class IntelligenceAlertUpdate(BaseModel):
+    status: Optional[str] = None
+    severity: Optional[str] = None
+
+
+class IntelligenceAlertResponse(BaseModel):
+    id: int
+    case_id: int
+    analysis_id: int
+    alert_type: str
+    title: str
+    description: Optional[str] = None
+    severity: str
+    status: str
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

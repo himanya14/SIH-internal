@@ -2,6 +2,7 @@ import re
 from collections import Counter, defaultdict
 from datetime import datetime
 
+
 '''
 50+ calls → CRITICAL
 10–49 calls → HIGH
@@ -11,7 +12,10 @@ from datetime import datetime
 ₹1 lakh+ → MEDIUM
 '''
 
+
+# =========================================================
 # ALERT DETECTOR
+# =========================================================
 
 def detect_alerts(
     data,
@@ -19,27 +23,10 @@ def detect_alerts(
     thresholds=None
 ):
     """
-    Detect suspicious patterns from intelligence data.
+    Detect suspicious analytical patterns from
+    intelligence data.
 
-    Parameters
-    ----------
-    data:
-        Can contain:
-            - relationships
-            - entities
-            - transactions
-            - calls
-            - records
-
-    syndicates:
-        Optional community-detection output.
-
-    thresholds:
-        Optional custom thresholds.
-
-    Returns
-    -------
-    list of alert dictionaries
+    Results are investigative indicators only.
     """
 
     if data is None:
@@ -66,8 +53,7 @@ def detect_alerts(
     )
 
     # -----------------------------------------------------
-    # If separate calls/transactions are not supplied,
-    # try to derive them from relationships.
+    # DERIVE CALLS FROM RELATIONSHIPS
     # -----------------------------------------------------
 
     if not calls:
@@ -81,6 +67,10 @@ def detect_alerts(
             }
         ]
 
+    # -----------------------------------------------------
+    # DERIVE TRANSACTIONS FROM RELATIONSHIPS
+    # -----------------------------------------------------
+
     if not transactions:
 
         transactions = [
@@ -91,7 +81,7 @@ def detect_alerts(
         ]
 
     # -----------------------------------------------------
-    # 1. Communication spike
+    # 1. COMMUNICATION SPIKES
     # -----------------------------------------------------
 
     alerts.extend(
@@ -105,7 +95,7 @@ def detect_alerts(
     )
 
     # -----------------------------------------------------
-    # 2. Late-night communication
+    # 2. LATE-NIGHT COMMUNICATION
     # -----------------------------------------------------
 
     alerts.extend(
@@ -119,7 +109,7 @@ def detect_alerts(
     )
 
     # -----------------------------------------------------
-    # 3. Suspicious financial transactions
+    # 3. LARGE TRANSACTIONS
     # -----------------------------------------------------
 
     alerts.extend(
@@ -133,7 +123,7 @@ def detect_alerts(
     )
 
     # -----------------------------------------------------
-    # 4. Circular money transfers
+    # 4. CIRCULAR MONEY TRANSFERS
     # -----------------------------------------------------
 
     alerts.extend(
@@ -143,7 +133,7 @@ def detect_alerts(
     )
 
     # -----------------------------------------------------
-    # 5. Shared entities
+    # 5. SHARED RESOURCES
     # -----------------------------------------------------
 
     alerts.extend(
@@ -157,7 +147,7 @@ def detect_alerts(
     )
 
     # -----------------------------------------------------
-    # 6. Cross-syndicate connections
+    # 6. CROSS-SYNDICATE CONNECTIONS
     # -----------------------------------------------------
 
     if syndicates:
@@ -170,7 +160,7 @@ def detect_alerts(
         )
 
     # -----------------------------------------------------
-    # Remove duplicates
+    # REMOVE DUPLICATES
     # -----------------------------------------------------
 
     alerts = deduplicate_alerts(
@@ -178,7 +168,7 @@ def detect_alerts(
     )
 
     # -----------------------------------------------------
-    # Sort by severity
+    # SORT BY SEVERITY
     # -----------------------------------------------------
 
     severity_order = {
@@ -199,7 +189,7 @@ def detect_alerts(
     )
 
     # -----------------------------------------------------
-    # Add alert IDs
+    # ADD ALERT IDS
     # -----------------------------------------------------
 
     for index, alert in enumerate(
@@ -225,16 +215,9 @@ def detect_communication_spikes(
     """
     Detect unusually high numbers of calls
     between the same pair of people.
-
-    Example:
-
-        47 calls between Ravi and Amit
-        within 24 hours.
-
     """
 
     pair_counts = Counter()
-
     pair_records = defaultdict(list)
 
     for call in calls:
@@ -312,7 +295,6 @@ def detect_late_night_communication(
     """
 
     pair_counts = Counter()
-
     pair_records = defaultdict(list)
 
     for call in calls:
@@ -479,7 +461,6 @@ def detect_circular_transactions(
     """
 
     transfer_graph = defaultdict(set)
-
     transfer_records = defaultdict(list)
 
     for transaction in transactions:
@@ -504,10 +485,6 @@ def detect_circular_transactions(
         ].append(transaction)
 
     alerts = []
-
-    # -----------------------------------------------------
-    # Search for 3-person cycles
-    # -----------------------------------------------------
 
     for first in transfer_graph:
 
@@ -597,7 +574,6 @@ def detect_shared_resources(
     }
 
     resource_people = defaultdict(set)
-
     resource_records = defaultdict(list)
 
     for relationship in relationships:
@@ -694,8 +670,6 @@ def detect_cross_syndicate_connections(
     """
     Detect people who connect two different
     detected syndicates.
-
-    This can identify potential bridge individuals.
     """
 
     assignments = syndicates.get(
@@ -704,7 +678,6 @@ def detect_cross_syndicate_connections(
     )
 
     alerts = []
-
     seen = set()
 
     for relationship in relationships:
@@ -800,8 +773,6 @@ def extract_hour(timestamp):
 
         return None
 
-    # ISO timestamp
-
     try:
 
         parsed = datetime.fromisoformat(
@@ -816,8 +787,6 @@ def extract_hour(timestamp):
     except ValueError:
 
         pass
-
-    # Try HH:MM
 
     match = re.search(
         r"\b([01]?\d|2[0-3]):([0-5]\d)\b",
@@ -835,9 +804,25 @@ def extract_hour(timestamp):
 
 def extract_amount(record):
     """
-    Extract transaction amount from
-    structured or textual data.
+    Extract a monetary amount from structured
+    or textual transaction data.
+
+    Supported examples:
+
+        ₹500000
+        Rs 500000
+        INR 500000
+        500000
+        5,00,000
+        5 lakh
+        10 lakhs
+        2 crore
+        1.5 crore
     """
+
+    # -----------------------------------------------------
+    # STRUCTURED AMOUNT FIELD
+    # -----------------------------------------------------
 
     amount = record.get(
         "amount"
@@ -850,54 +835,195 @@ def extract_amount(record):
 
         return float(amount)
 
+    # -----------------------------------------------------
+    # GET TEXT
+    # -----------------------------------------------------
+
     text = record.get(
         "evidence",
         ""
     )
 
     if not text:
+
         text = record.get(
             "message",
             ""
         )
 
-    if not text:
+    if not isinstance(
+        text,
+        str
+    ):
+
         return None
 
-    # Remove commas
+    if not text.strip():
 
-    text = text.replace(
-        ",",
-        ""
-    )
+        return None
 
-    # ₹50000
-    match = re.search(
-        r"₹\s*(\d+(?:\.\d+)?)",
-        text
-    )
-
-    if match:
-
-        return float(
-            match.group(1)
-        )
-
-    # Rs 50000 / INR 50000
+    # -----------------------------------------------------
+    # CRORE FORMAT
+    #
+    # 2 crore
+    # 1.5 crores
+    # -----------------------------------------------------
 
     match = re.search(
-        r"(?:Rs\.?|INR)\s*(\d+(?:\.\d+)?)",
+        r"\b(\d+(?:\.\d+)?)\s*crores?\b",
         text,
         re.IGNORECASE
     )
 
     if match:
 
-        return float(
+        return (
+            float(
+                match.group(1)
+            )
+            * 10000000
+        )
+
+    # -----------------------------------------------------
+    # LAKH FORMAT
+    #
+    # 5 lakh
+    # 10 lakhs
+    # -----------------------------------------------------
+
+    match = re.search(
+        r"\b(\d+(?:\.\d+)?)\s*lakhs?\b",
+        text,
+        re.IGNORECASE
+    )
+
+    if match:
+
+        return (
+            float(
+                match.group(1)
+            )
+            * 100000
+        )
+
+    # -----------------------------------------------------
+    # RUPEE SYMBOL
+    # -----------------------------------------------------
+
+    match = re.search(
+        r"₹\s*([\d,]+(?:\.\d+)?)",
+        text
+    )
+
+    if match:
+
+        return parse_numeric_amount(
             match.group(1)
         )
 
+    # -----------------------------------------------------
+    # RS / INR
+    # -----------------------------------------------------
+
+    match = re.search(
+        r"\b(?:Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)",
+        text,
+        re.IGNORECASE
+    )
+
+    if match:
+
+        return parse_numeric_amount(
+            match.group(1)
+        )
+
+    # -----------------------------------------------------
+    # PLAIN NUMBER
+    #
+    # Only accept numbers near financial language.
+    # This prevents phone numbers and IDs from being
+    # automatically treated as money.
+    # -----------------------------------------------------
+
+    financial_words = (
+        r"(?:"
+        r"transferred|transfer|paid|payment|"
+        r"sent|received|deposited|deposit|"
+        r"withdrew|withdrawn|transaction|"
+        r"money|amount"
+        r")"
+    )
+
+    match = re.search(
+        financial_words
+        + r".{0,40}?\b([\d,]{4,}(?:\.\d+)?)\b",
+        text,
+        re.IGNORECASE
+    )
+
+    if match:
+
+        numeric_text = match.group(1)
+
+        amount = parse_numeric_amount(
+            numeric_text
+        )
+
+        if amount is None:
+            return None
+
+        # Ignore values that look like
+        # 10-digit Indian phone numbers.
+        digits_only = re.sub(
+            r"\D",
+            "",
+            numeric_text
+        )
+
+        if len(digits_only) == 10:
+
+            return None
+
+        return amount
+
     return None
+
+
+def parse_numeric_amount(value):
+    """
+    Convert formatted numeric text into float.
+
+    Examples:
+
+        500000
+        500,000
+        5,00,000
+    """
+
+    if value is None:
+        return None
+
+    if not isinstance(
+        value,
+        str
+    ):
+
+        value = str(value)
+
+    cleaned = value.replace(
+        ",",
+        ""
+    ).strip()
+
+    try:
+
+        return float(
+            cleaned
+        )
+
+    except ValueError:
+
+        return None
 
 
 # =========================================================

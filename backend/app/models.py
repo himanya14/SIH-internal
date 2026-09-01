@@ -6,7 +6,8 @@ from sqlalchemy import (
     Text,
     ForeignKey,
     Float,
-    Boolean
+    Boolean,
+    JSON
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -34,6 +35,21 @@ class Case(Base):
     status = Column(String, default="Active")
 
     description = Column(Text, nullable=True)
+
+    data_origin = Column(
+        String,
+        default="Synthetic Demo Data"
+    )
+
+    synthetic = Column(
+        Boolean,
+        default=True
+    )
+
+    source_reference = Column(
+        Text,
+        nullable=True
+    )
 
     registered_on = Column(
         DateTime,
@@ -83,6 +99,18 @@ class Case(Base):
     intelligence_relationships = relationship(
         "IntelligenceRelationship",
         back_populates="case"
+    )
+
+    intelligence_analyses = relationship(
+        "IntelligenceAnalysis",
+        back_populates="case",
+        cascade="all, delete-orphan"
+    )
+
+    intelligence_alerts = relationship(
+        "IntelligenceAlert",
+        back_populates="case",
+        cascade="all, delete-orphan"
     )
 
 
@@ -671,4 +699,139 @@ class IntelligenceRelationship(Base):
     case = relationship(
         "Case",
         back_populates="intelligence_relationships"
+    )
+
+
+# ---------- INTELLIGENCE ANALYSIS ----------
+
+class IntelligenceAnalysis(Base):
+    __tablename__ = "intelligence_analyses"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    case_id = Column(
+        Integer,
+        ForeignKey("cases.id"),
+        nullable=False,
+        index=True
+    )
+
+    source_type = Column(
+        String,
+        default="FIR",
+        nullable=False
+    )
+
+    input_text = Column(
+        Text,
+        nullable=False
+    )
+
+    result_json = Column(
+        JSON,
+        nullable=False
+    )
+
+    created_by = Column(
+        String,
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now()
+    )
+
+    case = relationship(
+        "Case",
+        back_populates="intelligence_analyses"
+    )
+
+    alerts = relationship(
+        "IntelligenceAlert",
+        back_populates="analysis",
+        cascade="all, delete-orphan"
+    )
+
+
+# ---------- INTELLIGENCE ALERT ----------
+
+class IntelligenceAlert(Base):
+    __tablename__ = "intelligence_alerts"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    case_id = Column(
+        Integer,
+        ForeignKey("cases.id"),
+        nullable=False,
+        index=True
+    )
+
+    analysis_id = Column(
+        Integer,
+        ForeignKey("intelligence_analyses.id"),
+        nullable=False,
+        index=True
+    )
+
+    alert_type = Column(
+        String,
+        nullable=False
+    )
+
+    title = Column(
+        String,
+        nullable=False
+    )
+
+    description = Column(
+        Text,
+        nullable=True
+    )
+
+    severity = Column(
+        String,
+        default="Medium",
+        nullable=False
+    )
+
+    status = Column(
+        String,
+        default="Open",
+        nullable=False
+    )
+
+    created_by = Column(
+        String,
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now()
+    )
+
+    updated_at = Column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+
+    case = relationship(
+        "Case",
+        back_populates="intelligence_alerts"
+    )
+
+    analysis = relationship(
+        "IntelligenceAnalysis",
+        back_populates="alerts"
     )

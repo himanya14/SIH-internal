@@ -72,7 +72,7 @@ def create_evidence(
     return new_evidence
 
 
-# ---------- UPLOAD EVIDENCE FILE ----------
+# ---------- CREATE EVIDENCE WITH FILE ----------
 
 @router.post(
     "/upload",
@@ -136,6 +136,40 @@ def upload_evidence(
     db.refresh(new_evidence)
 
     return new_evidence
+
+
+# ---------- UPLOAD FILE TO EXISTING EVIDENCE ----------
+
+@router.post(
+    "/{evidence_id}/upload-file",
+    response_model=schemas.EvidenceResponse
+)
+def upload_file_to_existing_evidence(
+    evidence_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_officer=Depends(get_current_officer)
+):
+    evidence = db.query(
+        models.Evidence
+    ).filter(
+        models.Evidence.id == evidence_id
+    ).first()
+
+    if not evidence:
+        raise HTTPException(
+            status_code=404,
+            detail="Evidence not found"
+        )
+
+    file_path = save_evidence_file(file)
+
+    evidence.file_path = file_path
+
+    db.commit()
+    db.refresh(evidence)
+
+    return evidence
 
 
 # ---------- GET ALL EVIDENCE ----------

@@ -2,7 +2,7 @@ from entity_extractor import extract_entities
 from relation_extractor import extract_relationships
 from graph_builder import build_graph
 from kingpin_detector import detect_kingpin
-from guilt_score import calculate_guilt_score
+from investigation_priority import calculate_investigation_priority
 
 
 text = """
@@ -63,29 +63,29 @@ print(
 
 
 # =========================================================
-# 4. KINGPIN
+# 4. NETWORK INFLUENCE
 # =========================================================
 
-kingpin = detect_kingpin(
+network_influence = detect_kingpin(
     graph
 )
 
-print("\nKINGPIN:")
-print(kingpin)
+print("\nNETWORK INFLUENCE:")
+print(network_influence)
 
 
 # =========================================================
-# 5. GUILT / RISK SCORES
+# 5. INVESTIGATION PRIORITIES
 # =========================================================
 
-print("\nSUSPECT SCORES:")
+print("\nINVESTIGATION PRIORITIES:")
 
-for suspect in entities["persons"]:
+for person in entities["persons"]:
 
-    result = calculate_guilt_score(
-        suspect,
+    result = calculate_investigation_priority(
+        person,
         graph,
-        kingpin
+        network_influence
     )
 
     print("\n", result)

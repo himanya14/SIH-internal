@@ -16,7 +16,8 @@ from app.routers import (
     chargesheet,
     scans,
     intelligence,
-    relationships
+    relationships,
+    government_data
 )
 
 
@@ -59,6 +60,7 @@ app.include_router(chargesheet.router)
 app.include_router(scans.router)
 app.include_router(intelligence.router)
 app.include_router(relationships.router)
+app.include_router(government_data.router)
 
 
 # ---------- UPLOAD DIRECTORIES ----------

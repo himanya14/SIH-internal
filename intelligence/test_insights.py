@@ -55,29 +55,29 @@ case_data = {
 
     "kingpin": {
         "suspect": "Amit Sharma",
-        "role": "Kingpin",
-        "guilt_score": 97.51,
-        "risk_level": "Critical"
+        "role": "Highest Network Influence",
+        "influence_score": 97.51,
+        "priority_level": "Critical"
     },
 
-    "guilt_scores": [
+    "investigation_priorities": [
 
         {
             "suspect": "Amit Sharma",
-            "guilt_score": 97.51,
-            "risk_level": "Critical"
+            "investigation_priority": 97.51,
+            "priority_level": "Critical"
         },
 
         {
             "suspect": "Ravi Kumar",
-            "guilt_score": 64.14,
-            "risk_level": "High"
+            "investigation_priority": 64.14,
+            "priority_level": "High"
         },
 
         {
             "suspect": "Raj Malhotra",
-            "guilt_score": 35.75,
-            "risk_level": "Low"
+            "investigation_priority": 35.75,
+            "priority_level": "Low"
         }
     ],
 
@@ -132,8 +132,8 @@ print("GENERATED INTELLIGENCE")
 print("=" * 70)
 
 
-print("\nPRIMARY SUSPECT:")
-print(result["primary_suspect"])
+print("\nPRIMARY SUBJECT:")
+print(result["primary_subject"])
 
 
 print("\nNETWORK SUMMARY:")
@@ -146,8 +146,8 @@ for finding in result["key_findings"]:
     print("-", finding)
 
 
-print("\nRISK SUMMARY:")
-print(result["risk_summary"])
+print("\nPRIORITY SUMMARY:")
+print(result["priority_summary"])
 
 
 print("\nCHARGESHEET EVIDENCE:")
