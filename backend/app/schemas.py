@@ -47,6 +47,7 @@ class PersonCreate(BaseModel):
     address: Optional[str] = None
     role: str
     status: Optional[str] = "Under Investigation"
+    profile_image_path: Optional[str] = None
 
 
 class PersonResponse(PersonCreate):
@@ -176,3 +177,159 @@ class ChargesheetResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ---------- SCANS ----------
+
+class ScanCreate(BaseModel):
+    scan_id: str
+    case_id: Optional[int] = None
+    image_path: str
+    matched_person_id: Optional[int] = None
+    confidence: Optional[float] = None
+    match_status: Optional[str] = "Pending"
+    verification_status: Optional[str] = "Unverified"
+    source: Optional[str] = None
+    device_id: Optional[str] = None
+
+
+class ScanUpdate(BaseModel):
+    matched_person_id: Optional[int] = None
+    confidence: Optional[float] = None
+    match_status: Optional[str] = None
+    verification_status: Optional[str] = None
+    source: Optional[str] = None
+    device_id: Optional[str] = None
+
+
+class ScanResponse(BaseModel):
+    id: int
+    scan_id: str
+    case_id: Optional[int] = None
+    image_path: str
+    matched_person_id: Optional[int] = None
+    confidence: Optional[float] = None
+    match_status: str
+    verification_status: str
+    source: Optional[str] = None
+    device_id: Optional[str] = None
+    officer_id: str
+    scanned_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- INTELLIGENCE ENTITIES ----------
+
+class IntelligenceEntityCreate(BaseModel):
+    entity_id: str
+    case_id: Optional[int] = None
+    linked_person_id: Optional[int] = None
+    entity_type: str
+    label: str
+    value: Optional[str] = None
+    description: Optional[str] = None
+    source: Optional[str] = None
+    confidence: Optional[float] = None
+    verification_status: Optional[str] = "Unverified"
+    data_origin: Optional[str] = "Synthetic"
+    synthetic: Optional[bool] = True
+
+
+class IntelligenceEntityUpdate(BaseModel):
+    case_id: Optional[int] = None
+    linked_person_id: Optional[int] = None
+    entity_type: Optional[str] = None
+    label: Optional[str] = None
+    value: Optional[str] = None
+    description: Optional[str] = None
+    source: Optional[str] = None
+    confidence: Optional[float] = None
+    verification_status: Optional[str] = None
+    data_origin: Optional[str] = None
+    synthetic: Optional[bool] = None
+
+
+class IntelligenceEntityResponse(BaseModel):
+    id: int
+    entity_id: str
+    case_id: Optional[int] = None
+    linked_person_id: Optional[int] = None
+    entity_type: str
+    label: str
+    value: Optional[str] = None
+    description: Optional[str] = None
+    source: Optional[str] = None
+    confidence: Optional[float] = None
+    verification_status: str
+    data_origin: str
+    synthetic: bool
+    created_by: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- INTELLIGENCE RELATIONSHIPS ----------
+
+class IntelligenceRelationshipCreate(BaseModel):
+    relationship_id: str
+    case_id: Optional[int] = None
+    source_type: str
+    source_ref: str
+    target_type: str
+    target_ref: str
+    relationship_type: str
+    description: Optional[str] = None
+    confidence: Optional[float] = None
+    verification_status: Optional[str] = "Unverified"
+    source: Optional[str] = None
+    data_origin: Optional[str] = "Synthetic"
+    synthetic: Optional[bool] = True
+
+
+class IntelligenceRelationshipUpdate(BaseModel):
+    case_id: Optional[int] = None
+    source_type: Optional[str] = None
+    source_ref: Optional[str] = None
+    target_type: Optional[str] = None
+    target_ref: Optional[str] = None
+    relationship_type: Optional[str] = None
+    description: Optional[str] = None
+    confidence: Optional[float] = None
+    verification_status: Optional[str] = None
+    source: Optional[str] = None
+    data_origin: Optional[str] = None
+    synthetic: Optional[bool] = None
+
+
+class IntelligenceRelationshipResponse(BaseModel):
+    id: int
+    relationship_id: str
+    case_id: Optional[int] = None
+    source_type: str
+    source_ref: str
+    target_type: str
+    target_ref: str
+    relationship_type: str
+    description: Optional[str] = None
+    confidence: Optional[float] = None
+    verification_status: str
+    source: Optional[str] = None
+    data_origin: str
+    synthetic: bool
+    created_by: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- INTELLIGENCE ANALYSIS ----------
+
+class IntelligenceAnalysisRequest(BaseModel):
+    case_id: Optional[int] = None
+    text: str
+    source_type: Optional[str] = "FIR"

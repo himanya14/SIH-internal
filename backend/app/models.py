@@ -1,4 +1,13 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Text,
+    ForeignKey,
+    Float,
+    Boolean
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -61,6 +70,21 @@ class Case(Base):
         cascade="all, delete-orphan"
     )
 
+    scans = relationship(
+        "Scan",
+        back_populates="case"
+    )
+
+    intelligence_entities = relationship(
+        "IntelligenceEntity",
+        back_populates="case"
+    )
+
+    intelligence_relationships = relationship(
+        "IntelligenceRelationship",
+        back_populates="case"
+    )
+
 
 # ---------- PERSON ----------
 
@@ -89,6 +113,11 @@ class Person(Base):
         default="Under Investigation"
     )
 
+    profile_image_path = Column(
+        String,
+        nullable=True
+    )
+
     created_at = Column(
         DateTime,
         server_default=func.now()
@@ -98,6 +127,16 @@ class Person(Base):
         "CasePerson",
         back_populates="person",
         cascade="all, delete-orphan"
+    )
+
+    scans = relationship(
+        "Scan",
+        back_populates="matched_person"
+    )
+
+    intelligence_entities = relationship(
+        "IntelligenceEntity",
+        back_populates="linked_person"
     )
 
 
@@ -360,4 +399,276 @@ class Chargesheet(Base):
     case = relationship(
         "Case",
         back_populates="chargesheets"
+    )
+
+
+# ---------- FACE SCAN ----------
+
+class Scan(Base):
+    __tablename__ = "scans"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    scan_id = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True
+    )
+
+    case_id = Column(
+        Integer,
+        ForeignKey("cases.id"),
+        nullable=True
+    )
+
+    image_path = Column(
+        String,
+        nullable=False
+    )
+
+    matched_person_id = Column(
+        Integer,
+        ForeignKey("persons.id"),
+        nullable=True
+    )
+
+    confidence = Column(
+        Float,
+        nullable=True
+    )
+
+    match_status = Column(
+        String,
+        default="Pending"
+    )
+
+    verification_status = Column(
+        String,
+        default="Unverified"
+    )
+
+    source = Column(
+        String,
+        nullable=True
+    )
+
+    device_id = Column(
+        String,
+        nullable=True
+    )
+
+    officer_id = Column(
+        String,
+        nullable=False
+    )
+
+    scanned_at = Column(
+        DateTime,
+        server_default=func.now()
+    )
+
+    case = relationship(
+        "Case",
+        back_populates="scans"
+    )
+
+    matched_person = relationship(
+        "Person",
+        back_populates="scans"
+    )
+
+
+# ---------- INTELLIGENCE ENTITY ----------
+
+class IntelligenceEntity(Base):
+    __tablename__ = "intelligence_entities"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    entity_id = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True
+    )
+
+    case_id = Column(
+        Integer,
+        ForeignKey("cases.id"),
+        nullable=True
+    )
+
+    linked_person_id = Column(
+        Integer,
+        ForeignKey("persons.id"),
+        nullable=True
+    )
+
+    entity_type = Column(
+        String,
+        nullable=False
+    )
+
+    label = Column(
+        String,
+        nullable=False
+    )
+
+    value = Column(
+        String,
+        nullable=True
+    )
+
+    description = Column(
+        Text,
+        nullable=True
+    )
+
+    source = Column(
+        String,
+        nullable=True
+    )
+
+    confidence = Column(
+        Float,
+        nullable=True
+    )
+
+    verification_status = Column(
+        String,
+        default="Unverified"
+    )
+
+    data_origin = Column(
+        String,
+        default="Synthetic"
+    )
+
+    synthetic = Column(
+        Boolean,
+        default=True
+    )
+
+    created_by = Column(
+        String,
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now()
+    )
+
+    case = relationship(
+        "Case",
+        back_populates="intelligence_entities"
+    )
+
+    linked_person = relationship(
+        "Person",
+        back_populates="intelligence_entities"
+    )
+
+
+# ---------- INTELLIGENCE RELATIONSHIP ----------
+
+class IntelligenceRelationship(Base):
+    __tablename__ = "intelligence_relationships"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    relationship_id = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True
+    )
+
+    case_id = Column(
+        Integer,
+        ForeignKey("cases.id"),
+        nullable=True
+    )
+
+    source_type = Column(
+        String,
+        nullable=False
+    )
+
+    source_ref = Column(
+        String,
+        nullable=False
+    )
+
+    target_type = Column(
+        String,
+        nullable=False
+    )
+
+    target_ref = Column(
+        String,
+        nullable=False
+    )
+
+    relationship_type = Column(
+        String,
+        nullable=False
+    )
+
+    description = Column(
+        Text,
+        nullable=True
+    )
+
+    confidence = Column(
+        Float,
+        nullable=True
+    )
+
+    verification_status = Column(
+        String,
+        default="Unverified"
+    )
+
+    source = Column(
+        String,
+        nullable=True
+    )
+
+    data_origin = Column(
+        String,
+        default="Synthetic"
+    )
+
+    synthetic = Column(
+        Boolean,
+        default=True
+    )
+
+    created_by = Column(
+        String,
+        nullable=False
+    )
+
+    created_at = Column(
+        DateTime,
+        server_default=func.now()
+    )
+
+    case = relationship(
+        "Case",
+        back_populates="intelligence_relationships"
     )

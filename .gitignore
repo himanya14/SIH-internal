@@ -22,7 +22,11 @@ Thumbs.db
 # Uploads / generated files
 backend/uploads/evidence/*
 backend/uploads/generated/*
+backend/uploads/persons/*
+backend/uploads/scans/*
 
 # Keep upload folders
 !backend/uploads/evidence/.gitkeep
 !backend/uploads/generated/.gitkeep
+!backend/uploads/persons/.gitkeep
+!backend/uploads/scans/.gitkeep

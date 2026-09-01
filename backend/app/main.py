@@ -13,7 +13,10 @@ from app.routers import (
     diary,
     search,
     auth,
-    chargesheet
+    chargesheet,
+    scans,
+    intelligence,
+    relationships
 )
 
 
@@ -53,6 +56,9 @@ app.include_router(diary.router)
 app.include_router(search.router)
 app.include_router(auth.router)
 app.include_router(chargesheet.router)
+app.include_router(scans.router)
+app.include_router(intelligence.router)
+app.include_router(relationships.router)
 
 
 # ---------- UPLOAD DIRECTORIES ----------
@@ -60,9 +66,22 @@ app.include_router(chargesheet.router)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 EVIDENCE_DIR = BASE_DIR / "uploads" / "evidence"
+PERSONS_DIR = BASE_DIR / "uploads" / "persons"
+SCANS_DIR = BASE_DIR / "uploads" / "scans"
 GENERATED_DIR = BASE_DIR / "uploads" / "generated"
 
+
 EVIDENCE_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+PERSONS_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+SCANS_DIR.mkdir(
     parents=True,
     exist_ok=True
 )
@@ -79,6 +98,24 @@ app.mount(
     "/uploads/evidence",
     StaticFiles(directory=EVIDENCE_DIR),
     name="evidence-files"
+)
+
+
+# ---------- PERSON PROFILE IMAGES ----------
+
+app.mount(
+    "/uploads/persons",
+    StaticFiles(directory=PERSONS_DIR),
+    name="person-images"
+)
+
+
+# ---------- SCAN IMAGES ----------
+
+app.mount(
+    "/uploads/scans",
+    StaticFiles(directory=SCANS_DIR),
+    name="scan-images"
 )
 
 
